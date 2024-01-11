@@ -1,6 +1,6 @@
 Name:           perl-Date-Manip
 Version:        6.60
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Date manipulation routines
 Group:          Development/Libraries
 License:        GPL+ or Artistic
@@ -11,6 +11,7 @@ BuildArch:      noarch
 BuildRequires:  make
 BuildRequires:  perl-interpreter
 BuildRequires:  perl-generators
+BuildRequires:  perl(Config)
 BuildRequires:  perl(ExtUtils::MakeMaker) >= 6.76
 BuildRequires:  perl(strict)
 BuildRequires:  perl(warnings)
@@ -29,7 +30,7 @@ BuildRequires:  perl(utf8)
 # Tests only
 BuildRequires:  perl(Test::Inter)
 BuildRequires:  perl(Test::More)
-Requires:       perl(:MODULE_COMPAT_%(eval "$(perl -V:version)"; echo $version))
+Requires:       perl-libs
 Requires:       perl(Cwd)
 Requires:       perl(File::Find)
 Requires:       perl(File::Spec)
@@ -48,8 +49,23 @@ are all easily done. It deals with time as it is used in the Gregorian
 calendar (the one currently in use) with full support for time changes due
 to daylight saving time.
 
+%package tests
+Summary:        Tests for %{name}
+Requires:       %{name} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       perl-Test-Harness
+
+%description tests
+Tests from %{name}. Execute them
+with "%{_libexecdir}/%{name}/test".
+
 %prep
 %setup -q -n Date-Manip-%{version}
+
+# Help generators to recognize Perl scripts
+for F in t/*.t; do
+    perl -i -MConfig -ple 'print $Config{startperl} if $. == 1 && !s{\A#!.*perl\b}{$Config{startperl}}' "$F"
+    chmod +x "$F"
+done
 
 %build
 perl Makefile.PL INSTALLDIRS=vendor NO_PACKLIST=1
@@ -58,6 +74,17 @@ make %{?_smp_mflags}
 %install
 make pure_install DESTDIR=%{buildroot}
 %{_fixperms} %{buildroot}/*
+
+# Install tests
+mkdir -p %{buildroot}%{_libexecdir}/%{name}
+cp -a t %{buildroot}%{_libexecdir}/%{name}
+# Remove release tests
+rm -f %{buildroot}%{_libexecdir}/%{name}/t/pod*
+cat > %{buildroot}%{_libexecdir}/%{name}/test << 'EOF'
+#!/bin/sh
+cd %{_libexecdir}/%{name} && exec prove -I . -j "$(getconf _NPROCESSORS_ONLN)"
+EOF
+chmod +x %{buildroot}%{_libexecdir}/%{name}/test
 
 %check
 make test
@@ -69,7 +96,15 @@ make test
 %{_mandir}/man[13]/*.[13]*
 %{_bindir}/dm_*
 
+%files tests
+%{_libexecdir}/%{name}
+
 %changelog
+* Thu Jul 20 2023 Jitka Plesnikova <jplesnik@redhat.com> - 6.60-3
+- Replace versioned MODULE_COMPAT by non-versioned perl-libs
+- Package tests
+- Resolves: rhbz#2219504
+
 * Thu Feb 08 2018 Fedora Release Engineering <releng@fedoraproject.org> - 6.60-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_28_Mass_Rebuild
 
